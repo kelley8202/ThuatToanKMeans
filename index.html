@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chi tiết thuật toán K-Means</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .input-section {
+            flex: 1;
+            min-width: 300px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .result-section {
+            flex: 2;
+            min-width: 400px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        button {
+            padding: 8px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .step-section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #eee;
+            border-radius: 5px;
+            background-color: #fafafa;
+        }
+        .step-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #2c3e50;
+            font-size: 1.1em;
+        }
+        .conclusion {
+            font-weight: bold;
+            color: #d35400;
+            margin-top: 10px;
+        }
+        .highlight {
+            font-weight: bold;
+            background-color: #fffacd;
+        }
+        .stopped {
+            color: #27ae60;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Chi tiết thuật toán K-Means</h1>
+    
+    <div class="container">
+        <div class="input-section">
+            <h2>Nhập thông số</h2>
+            
+            <div>
+                <label for="k-value">Số cụm (k):</label>
+                <input type="number" id="k-value" min="1" value="2">
+            </div>
+            
+            <h3>Nhập các điểm dữ liệu:</h3>
+            <div id="points-input">
+                <div class="point-input">
+                    <span>Điểm 1:</span>
+                    <input type="number" class="x-input" placeholder="x" value="1">
+                    <input type="number" class="y-input" placeholder="y" value="1">
+                    <button class="remove-point">Xóa</button>
+                </div>
+                <div class="point-input">
+                    <span>Điểm 2:</span>
+                    <input type="number" class="x-input" placeholder="x" value="1">
+                    <input type="number" class="y-input" placeholder="y" value="2">
+                    <button class="remove-point">Xóa</button>
+                </div>
+                <div class="point-input">
+                    <span>Điểm 3:</span>
+                    <input type="number" class="x-input" placeholder="x" value="2">
+                    <input type="number" class="y-input" placeholder="y" value="1">
+                    <button class="remove-point">Xóa</button>
+                </div>
+                <div class="point-input">
+                    <span>Điểm 4:</span>
+                    <input type="number" class="x-input" placeholder="x" value="5">
+                    <input type="number" class="y-input" placeholder="y" value="5">
+                    <button class="remove-point">Xóa</button>
+                </div>
+                <div class="point-input">
+                    <span>Điểm 5:</span>
+                    <input type="number" class="x-input" placeholder="x" value="5">
+                    <input type="number" class="y-input" placeholder="y" value="6">
+                    <button class="remove-point">Xóa</button>
+                </div>
+            </div>
+            <button id="add-point">Thêm điểm</button>
+            
+            <h3>Tâm cụm ban đầu:</h3>
+            <div id="centroids-input"></div>
+            
+            <button id="random-centroids">Tạo tâm ngẫu nhiên</button>
+            <button id="run-algorithm">Chạy thuật toán</button>
+        </div>
+        
+        <div class="result-section">
+            <h2>Kết quả</h2>
+            <div id="steps-result"></div>
+        </div>
+    </div>
+
+    <script>
+        // Dữ liệu và trạng thái
+        let points = [];
+        let centroids = [];
+        let steps = [];
+        
+        // DOM elements
+        const kValueInput = document.getElementById('k-value');
+        const pointsInputDiv = document.getElementById('points-input');
+        const centroidsInputDiv = document.getElementById('centroids-input');
+        const stepsResultDiv = document.getElementById('steps-result');
+        
+        // Khởi tạo
+        document.addEventListener('DOMContentLoaded', function() {
+            // Thêm sự kiện cho các nút
+            document.getElementById('add-point').addEventListener('click', addPointInput);
+            document.getElementById('random-centroids').addEventListener('click', generateRandomCentroids);
+            document.getElementById('run-algorithm').addEventListener('click', runKMeans);
+            
+            // Thêm sự kiện xóa điểm
+            pointsInputDiv.addEventListener('click', function(e) {
+                if (e.target.classList.contains('remove-point')) {
+                    e.target.parentElement.remove();
+                    updatePointNumbers();
+                }
+            });
+            
+            // Cập nhật số lượng đầu vào tâm khi k thay đổi
+            kValueInput.addEventListener('change', updateCentroidsInputs);
+            
+            // Khởi tạo các đầu vào tâm
+            updateCentroidsInputs();
+        });
+        
+        // Thêm đầu vào điểm mới
+        function addPointInput() {
+            const pointCount = pointsInputDiv.children.length + 1;
+            const pointDiv = document.createElement('div');
+            pointDiv.className = 'point-input';
+            pointDiv.innerHTML = `
+                <span>Điểm ${pointCount}:</span>
+                <input type="number" class="x-input" placeholder="x">
+                <input type="number" class="y-input" placeholder="y">
+                <button class="remove-point">Xóa</button>
+            `;
+            pointsInputDiv.appendChild(pointDiv);
+        }
+        
+        // Cập nhật số thứ tự điểm
+        function updatePointNumbers() {
+            const pointInputs = pointsInputDiv.querySelectorAll('.point-input');
+            pointInputs.forEach((div, index) => {
+                div.querySelector('span').textContent = `Điểm ${index + 1}:`;
+            });
+        }
+        
+        // Cập nhật đầu vào tâm dựa trên giá trị k
+        function updateCentroidsInputs() {
+            const k = parseInt(kValueInput.value);
+            centroidsInputDiv.innerHTML = '';
+            
+            for (let i = 0; i < k; i++) {
+                const centroidDiv = document.createElement('div');
+                centroidDiv.className = 'centroid-input';
+                centroidDiv.innerHTML = `
+                    <span>Tâm ${i + 1}:</span>
+                    <input type="number" class="x-input" placeholder="x">
+                    <input type="number" class="y-input" placeholder="y">
+                `;
+                centroidsInputDiv.appendChild(centroidDiv);
+            }
+        }
+        
+        // Tạo tâm ngẫu nhiên
+        function generateRandomCentroids() {
+            const pointInputs = pointsInputDiv.querySelectorAll('.point-input');
+            if (pointInputs.length === 0) return;
+            
+            // Lấy tất cả các điểm hiện có
+            const tempPoints = [];
+            pointInputs.forEach(div => {
+                const x = parseFloat(div.querySelector('.x-input').value) || 0;
+                const y = parseFloat(div.querySelector('.y-input').value) || 0;
+                tempPoints.push({x, y});
+            });
+            
+            if (tempPoints.length === 0) return;
+            
+            // Tính phạm vi x,y
+            let minX = tempPoints[0].x, maxX = tempPoints[0].x;
+            let minY = tempPoints[0].y, maxY = tempPoints[0].y;
+            
+            tempPoints.forEach(point => {
+                minX = Math.min(minX, point.x);
+                maxX = Math.max(maxX, point.x);
+                minY = Math.min(minY, point.y);
+                maxY = Math.max(maxY, point.y);
+            });
+            
+            // Tạo tâm ngẫu nhiên trong phạm vi
+            const k = parseInt(kValueInput.value);
+            const centroidInputs = centroidsInputDiv.querySelectorAll('.centroid-input');
+            
+            for (let i = 0; i < k && i < centroidInputs.length; i++) {
+                const x = (Math.random() * (maxX - minX) + minX).toFixed(2);
+                const y = (Math.random() * (maxY - minY) + minY).toFixed(2);
+                
+                centroidInputs[i].querySelector('.x-input').value = x;
+                centroidInputs[i].querySelector('.y-input').value = y;
+            }
+        }
+        
+        // Tính khoảng cách và gán cụm cho các điểm
+        function calculateClusters(points, centroids) {
+            const assignments = [];
+            const conclusions = [];
+            const distances = [];
+            
+            for (let i = 0; i < points.length; i++) {
+                const point = points[i];
+                let minDist = Infinity;
+                let closestCentroid = -1;
+                const pointDistances = [];
+                
+                for (let j = 0; j < centroids.length; j++) {
+                    const centroid = centroids[j];
+                    const dist = Math.sqrt(
+                        Math.pow(point.x - centroid.x, 2) + 
+                        Math.pow(point.y - centroid.y, 2)
+                    );
+                    pointDistances.push(dist);
+                    
+                    if (dist < minDist) {
+                        minDist = dist;
+                        closestCentroid = j;
+                    }
+                }
+                
+                assignments.push(closestCentroid);
+                distances.push(pointDistances);
+                conclusions.push(`Điểm ${i+1} (${point.x.toFixed(2)},${point.y.toFixed(2)}) → C${closestCentroid + 1}`);
+                
+                // Cập nhật cụm cho điểm
+                points[i].cluster = closestCentroid;
+            }
+            
+            return { assignments, conclusions, distances };
+        }
+        
+        // Cập nhật vị trí tâm cụm
+        function updateCentroids(points, centroids, assignments) {
+            const clusterSums = Array(centroids.length).fill().map(() => ({x: 0, y: 0, count: 0}));
+            
+            for (let i = 0; i < points.length; i++) {
+                const cluster = assignments[i];
+                clusterSums[cluster].x += points[i].x;
+                clusterSums[cluster].y += points[i].y;
+                clusterSums[cluster].count++;
+            }
+            
+            const newCentroids = [];
+            for (let j = 0; j < centroids.length; j++) {
+                if (clusterSums[j].count > 0) {
+                    newCentroids.push({
+                        x: clusterSums[j].x / clusterSums[j].count,
+                        y: clusterSums[j].y / clusterSums[j].count,
+                        index: j
+                    });
+                } else {
+                    // Giữ nguyên tâm nếu cụm không có điểm nào
+                    newCentroids.push({
+                        x: centroids[j].x,
+                        y: centroids[j].y,
+                        index: j
+                    });
+                }
+            }
+            
+            return newCentroids;
+        }
+        
+        // So sánh hai kết luận có giống nhau không
+        function isSameConclusion(conclusion1, conclusion2) {
+            if (!conclusion1 || !conclusion2) return false;
+            if (typeof conclusion1 !== typeof conclusion2) return false;
+            if (Array.isArray(conclusion1) && Array.isArray(conclusion2)) {
+                if (conclusion1.length !== conclusion2.length) return false;
+                return conclusion1.every((val, i) => val === conclusion2[i]);
+            }
+            return conclusion1 === conclusion2;
+        }
+        
+        // Chạy thuật toán K-Means
+        function runKMeans() {
+            // Lấy dữ liệu đầu vào
+            points = [];
+            centroids = [];
+            steps = [];
+            
+            // Lấy các điểm
+            const pointInputs = pointsInputDiv.querySelectorAll('.point-input');
+            pointInputs.forEach(div => {
+                const x = parseFloat(div.querySelector('.x-input').value);
+                const y = parseFloat(div.querySelector('.y-input').value);
+                if (!isNaN(x) && !isNaN(y)) {
+                    points.push({x, y, cluster: -1});
+                }
+            });
+            
+            if (points.length === 0) {
+                alert('Vui lòng nhập ít nhất một điểm dữ liệu');
+                return;
+            }
+            
+            // Lấy các tâm
+            const k = parseInt(kValueInput.value);
+            const centroidInputs = centroidsInputDiv.querySelectorAll('.centroid-input');
+            
+            for (let i = 0; i < k && i < centroidInputs.length; i++) {
+                const x = parseFloat(centroidInputs[i].querySelector('.x-input').value);
+                const y = parseFloat(centroidInputs[i].querySelector('.y-input').value);
+                if (!isNaN(x) && !isNaN(y)) {
+                    centroids.push({x, y, index: i});
+                }
+            }
+            
+            if (centroids.length !== k) {
+                alert(`Vui lòng nhập đủ ${k} tâm cụm ban đầu`);
+                return;
+            }
+            
+            // Bước 0: Chỉ hiển thị giá trị ban đầu
+            steps.push({
+                title: "Bước 0: Giá trị ban đầu",
+                description: "Các điểm dữ liệu và tâm cụm ban đầu",
+                centroids: JSON.parse(JSON.stringify(centroids)),
+                points: JSON.parse(JSON.stringify(points)),
+                assignments: Array(points.length).fill(-1),
+                distances: Array(points.length).fill().map(() => Array(centroids.length).fill(0)),
+                conclusion: "Chưa thực hiện tính toán",
+                stopped: false
+            });
+            
+            let iteration = 0;
+            let shouldContinue = true;
+            
+            do {
+                iteration++;
+                
+                // Bước 1: Gán điểm vào cụm gần nhất
+                const clusterResult = calculateClusters(points, centroids);
+                
+                // Bước 2: Cập nhật vị trí tâm cụm
+                const newCentroids = updateCentroids(points, centroids, clusterResult.assignments);
+                
+                // Kiểm tra xem kết luận có giống bước trước không
+                const previousConclusion = steps.length > 0 ? steps[steps.length-1].conclusion : null;
+                const currentConclusion = clusterResult.conclusions.join('<br>');
+                const conclusionsSame = isSameConclusion(previousConclusion, currentConclusion);
+                
+                // Thêm bước mới vào kết quả
+                steps.push({
+                    title: `Bước ${iteration}: Gán điểm và cập nhật tâm`,
+                    description: iteration === 1 
+                        ? "Lần đầu gán điểm vào cụm gần nhất và tính toán khoảng cách"
+                        : "Cập nhật vị trí tâm cụm và gán lại điểm vào cụm gần nhất",
+                    centroids: JSON.parse(JSON.stringify(newCentroids)),
+                    points: JSON.parse(JSON.stringify(points)),
+                    assignments: [...clusterResult.assignments],
+                    distances: clusterResult.distances,
+                    conclusion: currentConclusion,
+                    stopped: conclusionsSame
+                });
+                
+                // Cập nhật tâm cụm mới
+                centroids = newCentroids;
+                
+                // Kiểm tra điều kiện dừng
+                shouldContinue = !conclusionsSame && iteration < 20;
+                
+            } while (shouldContinue);
+            
+            // Hiển thị tất cả các bước
+            renderAllSteps();
+        }
+        
+        // Hiển thị tất cả các bước
+        function renderAllSteps() {
+            stepsResultDiv.innerHTML = '';
+            
+            steps.forEach((step, index) => {
+                const stepDiv = document.createElement('div');
+                stepDiv.className = 'step-section';
+                
+                const titleDiv = document.createElement('div');
+                titleDiv.className = 'step-title';
+                titleDiv.textContent = step.title;
+                if (step.stopped) {
+                    titleDiv.innerHTML += ' <span class="stopped">(Đã dừng)</span>';
+                }
+                stepDiv.appendChild(titleDiv);
+                
+                const descDiv = document.createElement('div');
+                descDiv.className = 'step-description';
+                descDiv.textContent = step.description;
+                stepDiv.appendChild(descDiv);
+                
+                // Tạo bảng chi tiết
+                const table = document.createElement('table');
+                
+                // Tạo header
+                const thead = document.createElement('thead');
+                let headerRow = `<tr>
+                    <th>Điểm</th>
+                    <th>Tọa độ (x,y)</th>`;
+                
+                // Bước 0 chỉ hiển thị thông tin cơ bản
+                if (index === 0) {
+                    headerRow += `<th>Tâm gần nhất</th></tr>`;
+                } else {
+                    headerRow += `<th>Cụm</th>`;
+                    // Thêm cột khoảng cách đến các tâm
+                    for (let i = 0; i < step.centroids.length; i++) {
+                        headerRow += `<th>Khoảng cách đến C${i+1}</th>`;
+                    }
+                    headerRow += `</tr>`;
+                }
+                
+                thead.innerHTML = headerRow;
+                table.appendChild(thead);
+                
+                // Tạo body
+                const tbody = document.createElement('tbody');
+                
+                // Dữ liệu các điểm
+                for (let i = 0; i < step.points.length; i++) {
+                    const point = step.points[i];
+                    const row = document.createElement('tr');
+                    
+                    row.innerHTML = `
+                        <td>${i + 1}</td>
+                        <td>(${point.x.toFixed(2)}, ${point.y.toFixed(2)})</td>`;
+                    
+                    if (index === 0) {
+                        // Bước 0 chỉ hiển thị thông tin cơ bản
+                        row.innerHTML += `<td>-</td>`;
+                    } else {
+                        const cluster = step.assignments[i];
+                        row.innerHTML += `<td class="highlight">C${cluster + 1}</td>`;
+                        
+                        // Hiển thị khoảng cách đến các tâm
+                        for (let j = 0; j < step.centroids.length; j++) {
+                            const dist = step.distances[i][j].toFixed(2);
+                            const isClosest = cluster === j;
+                            row.innerHTML += `<td class="${isClosest ? 'highlight' : ''}">${dist}</td>`;
+                        }
+                    }
+                    
+                    tbody.appendChild(row);
+                }
+                
+                // Dữ liệu các tâm cụm
+                const centroidRow = document.createElement('tr');
+                if (index === 0) {
+                    centroidRow.innerHTML = `<td colspan="3" style="background-color:#f2f2f2;font-weight:bold;">Tâm cụm ban đầu</td>`;
+                } else {
+                    centroidRow.innerHTML = `<td colspan="${3 + step.centroids.length}" style="background-color:#f2f2f2;font-weight:bold;">Tâm cụm</td>`;
+                }
+                tbody.appendChild(centroidRow);
+                
+                for (let i = 0; i < step.centroids.length; i++) {
+                    const centroid = step.centroids[i];
+                    const row = document.createElement('tr');
+                    
+                    if (index === 0) {
+                        row.innerHTML = `
+                            <td>C${i + 1}</td>
+                            <td>(${centroid.x.toFixed(2)}, ${centroid.y.toFixed(2)})</td>
+                            <td>-</td>`;
+                    } else {
+                        row.innerHTML = `
+                            <td>C${i + 1}</td>
+                            <td>(${centroid.x.toFixed(2)}, ${centroid.y.toFixed(2)})</td>
+                            <td>-</td>`;
+                        
+                        for (let j = 0; j < step.centroids.length; j++) {
+                            row.innerHTML += `<td>-</td>`;
+                        }
+                    }
+                    
+                    tbody.appendChild(row);
+                }
+                
+                table.appendChild(tbody);
+                stepDiv.appendChild(table);
+                
+                // Thêm kết luận
+                const conclusionDiv = document.createElement('div');
+                conclusionDiv.className = 'conclusion';
+                conclusionDiv.innerHTML = `<strong>Kết luận:</strong><br>${step.conclusion}`;
+                stepDiv.appendChild(conclusionDiv);
+                
+                stepsResultDiv.appendChild(stepDiv);
+            });
+        }
+    </script>
+</body>
+</html>
